@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  activities    Activity[]
+  runstates     RunstateSnapshot[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// EVENTS (Participate)
+// ============================================
+
+enum EventSource {
+  aggregated
+  submitted
+}
+
+enum ActivityType {
+  run
+  cycle
+  swim
+  walk
+  triathlon
+}
+
+model Event {
+  id          String       @id @default(cuid())
+  name        String
+  description String?      @db.Text
+  date        DateTime
+  location    String?
+  url         String?
+  source      EventSource  @default(aggregated)
+  sourceId    String?      // External ID for deduplication
+  sourceUrl   String?      // Where we found it
+  activityType ActivityType
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([source, sourceId])
+  @@index([date])
+  @@index([activityType])
+}
+
+// ============================================
+// STORE (Equip)
+// ============================================
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  price       Int      // Stored in cents
+  currency    String   @default("USD")
+  stripeId    String?  @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================
+// ACTIVITIES (Runstate Input)
+// ============================================
+
+model Activity {
+  id              String       @id @default(cuid())
+  userId          String
+  externalId      String?      // e.g., Strava activity ID
+  source          String       @default("strava")
+  activityType    ActivityType
+  name            String?
+  startTime       DateTime
+  elapsedTime     Int          // seconds
+  movingTime      Int?         // seconds
+  distance        Float?       // meters
+  elevationGain   Float?       // meters
+  averageHeartRate Float?
+  maxHeartRate    Float?
+  averagePower    Float?       // watts
+  rawData         Json?        // Original payload, stored for reprocessing
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, externalId])
+  @@index([userId, startTime])
+}
+
+// ============================================
+// RUNSTATE (Output)
+// ============================================
+
+model RunstateSnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  computedAt   DateTime @default(now())
+
+  // Normalized physiological state
+  load         Float    // Cumulative load score
+  trend        String   // "rising", "stable", "falling"
+  baseline     Float    // Personal baseline reference
+  balance      Float    // Cross-activity balance indicator
+
+  // Computation metadata
+  inputWindow  Int      // Days of data used
+  inputCount   Int      // Number of activities considered
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, computedAt])
+}

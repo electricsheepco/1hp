@@ -1,0 +1,23 @@
+{
+  "name": "1hp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "1HP — One Human Powered",
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "start": "npm run start --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web",
+    "db:generate": "npx prisma generate",
+    "db:push": "npx prisma db push",
+    "db:studio": "npx prisma studio"
+  },
+  "workspaces": [
+    "apps/*",
+    "engine/*",
+    "analytics"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED"
+}
