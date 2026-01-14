@@ -9,7 +9,7 @@ import { useState } from 'react'
 const navItems = [
   { href: '/participate', label: 'Participate' },
   { href: '/equip', label: 'Equip' },
-  { href: '/runstate', label: 'Understand' },
+  { href: '/runstate', label: 'Measure' },
 ]
 
 export function Navigation() {

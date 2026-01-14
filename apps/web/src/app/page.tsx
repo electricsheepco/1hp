@@ -18,7 +18,7 @@ const pillars = [
     image: '/patterns/people-standing.png',
   },
   {
-    name: 'Understand',
+    name: 'Measure',
     href: '/runstate',
     description: 'Know where you are. Your body as one continuous system across all movement.',
     icon: Waves,
