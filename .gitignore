@@ -38,6 +38,10 @@ prisma/*.db-journal
 # Vercel
 .vercel
 
+# Remotion
+apps/video/out/
+.remotion/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

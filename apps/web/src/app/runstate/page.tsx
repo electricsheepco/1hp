@@ -98,12 +98,10 @@ function generateYearDates(year: number): Date[] {
   const dates: Date[] = []
   const startDate = new Date(year, 0, 1)
   const startDay = startDate.getDay()
-  const adjustedStart = new Date(startDate)
-  adjustedStart.setDate(adjustedStart.getDate() - startDay)
 
-  for (let i = 0; i < 53 * 7; i++) {
-    const date = new Date(adjustedStart)
-    date.setDate(adjustedStart.getDate() + i)
+  // Create dates using local time to avoid timezone issues
+  for (let i = -startDay; i < 53 * 7 - startDay; i++) {
+    const date = new Date(year, 0, 1 + i)
     dates.push(date)
   }
   return dates
@@ -171,18 +169,131 @@ export default function RunstatePage() {
   const activeDays = sampleLoadHistory.filter(d => d.load > 0).length
 
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
+    <div className="min-h-[calc(100vh-4rem)] overflow-hidden">
+      {/* Funky animated styles */}
+      <style jsx>{`
+        @keyframes slide-down {
+          0% { transform: translateY(-30px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes slide-up {
+          0% { transform: translateY(30px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes scale-in {
+          0% { transform: scale(0.9); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes bounce-in {
+          0% { transform: scale(0.3) translateY(50px); opacity: 0; }
+          50% { transform: scale(1.05) translateY(-5px); }
+          70% { transform: scale(0.95) translateY(2px); }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 5px rgba(201, 100, 66, 0.2); }
+          50% { box-shadow: 0 0 20px rgba(201, 100, 66, 0.4); }
+        }
+
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(-2deg); }
+          50% { transform: rotate(2deg); }
+        }
+
+        @keyframes count-up {
+          0% { transform: translateY(20px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes slide-expand {
+          0% { width: 0; }
+          100% { width: var(--target-width); }
+        }
+
+        .header-animate {
+          animation: slide-down 0.6s ease-out forwards;
+        }
+
+        .header-subtitle {
+          animation: slide-down 0.6s ease-out 0.1s forwards;
+          opacity: 0;
+        }
+
+        .connection-status {
+          animation: slide-up 0.5s ease-out 0.2s forwards;
+          opacity: 0;
+        }
+
+        .heatmap-animate {
+          animation: scale-in 0.5s ease-out 0.3s forwards;
+          opacity: 0;
+        }
+
+        .load-card {
+          animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.4s forwards;
+          opacity: 0;
+        }
+
+        .stat-card {
+          animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+          opacity: 0;
+        }
+
+        .load-value {
+          animation: count-up 0.8s ease-out 0.6s forwards;
+          opacity: 0;
+        }
+
+        .load-indicator {
+          animation: glow 2s ease-in-out infinite;
+        }
+
+        .connect-btn:hover {
+          animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        .demo-btn:hover {
+          animation: wiggle 0.3s ease-in-out;
+        }
+
+        .heatmap-cell:hover {
+          animation: pulse 0.3s ease-in-out;
+        }
+
+        .expand-btn:hover svg {
+          animation: wiggle 0.3s ease-in-out;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="border-b border-border">
         <div className="container mx-auto px-4 py-12">
-          <h1 className="text-4xl font-light tracking-tight mb-2">Runstate</h1>
-          <p className="text-lg text-muted-foreground">Understanding your body</p>
+          <h1 className="header-animate text-4xl font-light tracking-tight mb-2">
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">R</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">u</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">n</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">s</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">t</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">a</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">t</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">e</span>
+          </h1>
+          <p className="header-subtitle text-lg text-muted-foreground">Understanding your body</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
         {/* Demo state toggle */}
-        <div className="mb-8 p-4 bg-muted/50 rounded-lg max-w-3xl">
+        <div className="connection-status mb-8 p-4 bg-muted/50 rounded-lg max-w-3xl hover:bg-muted/70 transition-colors duration-300">
           <p className="text-xs text-muted-foreground mb-2">Demo: View different states</p>
           <div className="flex gap-2">
             {(['empty', 'insufficient', 'active'] as ViewState[]).map(state => (
@@ -193,7 +304,7 @@ export default function RunstatePage() {
                   setConnected(state !== 'empty')
                 }}
                 className={cn(
-                  'px-3 py-1.5 text-xs rounded border transition-all duration-200 capitalize',
+                  'demo-btn px-3 py-1.5 text-xs rounded border transition-all duration-300 capitalize hover:scale-105',
                   viewState === state
                     ? 'bg-foreground text-background'
                     : 'border-border hover:border-foreground/50 hover:bg-muted/50'
@@ -207,17 +318,17 @@ export default function RunstatePage() {
 
         {/* Connection status */}
         {connected && (
-          <div className="flex items-center justify-between mb-8 pb-8 border-b border-border max-w-3xl">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-foreground animate-pulse" />
-              <span className="text-sm">Connected: Strava</span>
+          <div className="connection-status flex items-center justify-between mb-8 pb-8 border-b border-border max-w-3xl">
+            <div className="flex items-center gap-2 group">
+              <div className="w-2 h-2 rounded-full bg-foreground animate-pulse group-hover:scale-150 transition-transform" />
+              <span className="text-sm group-hover:text-primary transition-colors">Connected: Strava</span>
             </div>
             <button
               onClick={() => {
                 setConnected(false)
                 setViewState('empty')
               }}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300"
             >
               Disconnect
             </button>
@@ -236,7 +347,7 @@ export default function RunstatePage() {
                 setConnected(true)
                 setViewState('insufficient')
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded font-medium hover:bg-foreground/90 transition-colors"
+              className="connect-btn inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded font-medium hover:bg-foreground/90 hover:scale-105 transition-all duration-300"
             >
               <LinkIcon className="w-4 h-4" />
               Connect Strava
@@ -258,7 +369,7 @@ export default function RunstatePage() {
         {viewState === 'active' && (
           <div className="space-y-8">
             {/* Load Heatmap */}
-            <div className="p-6 border border-border rounded-lg bg-card">
+            <div className="heatmap-animate p-6 border border-border rounded-lg bg-card hover:border-primary/30 transition-colors duration-500">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-muted-foreground">
                   {activeDays} active days in {year}
@@ -268,7 +379,7 @@ export default function RunstatePage() {
                   <div className="flex gap-0.5">
                     <div className="w-3 h-3 rounded-sm bg-muted" />
                     {loadColorScale.slice(1).map((cls, i) => (
-                      <div key={i} className={cn('w-3 h-3 rounded-sm', cls)} />
+                      <div key={i} className={cn('w-3 h-3 rounded-sm transition-transform hover:scale-150', cls)} />
                     ))}
                   </div>
                   <span>More</span>
@@ -312,10 +423,10 @@ export default function RunstatePage() {
                           }
                         }}
                         className={cn(
-                          'w-3 h-3 rounded-sm transition-all',
+                          'heatmap-cell w-3 h-3 rounded-sm transition-all duration-200',
                           isCurrentYear && !isFuture ? getLoadColorClass(load) : 'bg-transparent',
-                          isCurrentYear && !isFuture && load > 0 && 'cursor-pointer hover:ring-2 hover:ring-foreground/20 hover:scale-125',
-                          isSelected && 'ring-2 ring-foreground scale-125'
+                          isCurrentYear && !isFuture && load > 0 && 'cursor-pointer hover:ring-2 hover:ring-orange-400/50 hover:scale-150',
+                          isSelected && 'ring-2 ring-foreground scale-150'
                         )}
                         title={isCurrentYear && !isFuture ? `${date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${load} load` : ''}
                       />
@@ -337,7 +448,7 @@ export default function RunstatePage() {
                   </div>
                   <button
                     onClick={() => setSelectedDate(null)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300"
                   >
                     Clear
                   </button>
@@ -350,11 +461,11 @@ export default function RunstatePage() {
               <h2 className="text-sm font-medium text-muted-foreground mb-4">Your current state</h2>
 
               {/* Load card */}
-              <div className="bg-card border border-border rounded-lg p-8 mb-6">
+              <div className="load-card bg-card border border-border rounded-lg p-8 mb-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-500">
                 <div className="space-y-6">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground mb-1">LOAD</p>
-                    <p className="text-5xl font-light tracking-tight">{sampleData.load}</p>
+                    <p className="load-value text-5xl font-light tracking-tight hover:text-primary transition-colors duration-300">{sampleData.load}</p>
                   </div>
 
                   {/* Load bar */}
@@ -365,13 +476,13 @@ export default function RunstatePage() {
                         style={{ left: `${(sampleData.baseline / 100) * 100}%` }}
                       />
                       <div
-                        className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-foreground rounded-full transition-all duration-500"
+                        className="load-indicator absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-foreground rounded-full transition-all duration-500 hover:scale-150"
                         style={{ left: `${(sampleData.load / 100) * 100}%`, marginLeft: '-6px' }}
                       />
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>0</span>
-                      <span>baseline ({sampleData.baseline})</span>
+                      <span className="hover:text-foreground transition-colors">baseline ({sampleData.baseline})</span>
                       <span>100</span>
                     </div>
                   </div>
@@ -384,17 +495,23 @@ export default function RunstatePage() {
 
               {/* Trend and Balance cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="bg-card border border-border rounded-lg p-6 hover:border-foreground/20 transition-all duration-300">
+                <div
+                  className="stat-card bg-card border border-border rounded-lg p-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-500"
+                  style={{ animationDelay: '0.5s' }}
+                >
                   <p className="text-sm font-medium text-muted-foreground mb-1">TREND</p>
-                  <p className="text-2xl font-medium mb-3">{getTrendLabel(sampleData.trend)}</p>
+                  <p className="text-2xl font-medium mb-3 hover:text-primary transition-colors duration-300">{getTrendLabel(sampleData.trend)}</p>
                   <p className="text-sm text-muted-foreground">
                     {getTrendDescription(sampleData.trend)}
                   </p>
                 </div>
 
-                <div className="bg-card border border-border rounded-lg p-6 hover:border-foreground/20 transition-all duration-300">
+                <div
+                  className="stat-card bg-card border border-border rounded-lg p-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-500"
+                  style={{ animationDelay: '0.6s' }}
+                >
                   <p className="text-sm font-medium text-muted-foreground mb-1">BALANCE</p>
-                  <p className="text-2xl font-medium mb-3">{getBalanceLabel(sampleData.balance)}</p>
+                  <p className="text-2xl font-medium mb-3 hover:text-primary transition-colors duration-300">{getBalanceLabel(sampleData.balance)}</p>
                   <p className="text-sm text-muted-foreground">
                     {getBalanceDescription(sampleData.balance)}
                   </p>
@@ -405,13 +522,13 @@ export default function RunstatePage() {
               <div className="border-t border-border pt-8">
                 <button
                   onClick={() => setExplanationOpen(!explanationOpen)}
-                  className="flex items-center justify-between w-full text-left group"
+                  className="expand-btn flex items-center justify-between w-full text-left group"
                 >
-                  <span className="font-medium group-hover:text-foreground/80 transition-colors">About this data</span>
+                  <span className="font-medium group-hover:text-primary transition-colors">About this data</span>
                   {explanationOpen ? (
-                    <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                    <ChevronUp className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    <ChevronDown className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   )}
                 </button>
 
@@ -430,7 +547,7 @@ export default function RunstatePage() {
                 {explanationOpen && (
                   <div className="mt-6 space-y-6 text-sm">
                     <div className="border-t border-border pt-6">
-                      <h4 className="font-medium mb-3">What Runstate measures</h4>
+                      <h4 className="font-medium mb-3 hover:text-primary transition-colors">What Runstate measures</h4>
                       <p className="text-muted-foreground leading-relaxed">
                         Runstate combines your recent activities into a unified view of your body's
                         current state. It treats all human-powered movement — running, cycling,
@@ -439,27 +556,27 @@ export default function RunstatePage() {
                     </div>
 
                     <div className="space-y-4">
-                      <div>
-                        <h5 className="font-medium mb-1">Load</h5>
+                      <div className="group">
+                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Load</h5>
                         <p className="text-muted-foreground">
                           A cumulative measure of recent physical stress. Recent activities
                           contribute more than older ones.
                         </p>
                       </div>
-                      <div>
-                        <h5 className="font-medium mb-1">Baseline</h5>
+                      <div className="group">
+                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Baseline</h5>
                         <p className="text-muted-foreground">
                           Your personal reference point, calculated from the past 90 days of activity.
                         </p>
                       </div>
-                      <div>
-                        <h5 className="font-medium mb-1">Trend</h5>
+                      <div className="group">
+                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Trend</h5>
                         <p className="text-muted-foreground">
                           Whether your load is rising, falling, or stable compared to the previous two weeks.
                         </p>
                       </div>
-                      <div>
-                        <h5 className="font-medium mb-1">Balance</h5>
+                      <div className="group">
+                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Balance</h5>
                         <p className="text-muted-foreground">
                           How your activity is distributed across different types.
                         </p>
@@ -467,7 +584,7 @@ export default function RunstatePage() {
                     </div>
 
                     <div className="border-t border-border pt-6">
-                      <h4 className="font-medium mb-3">What Runstate does not do</h4>
+                      <h4 className="font-medium mb-3 hover:text-primary transition-colors">What Runstate does not do</h4>
                       <p className="text-muted-foreground leading-relaxed">
                         Runstate does not tell you to do more or less. It does not set goals or
                         track streaks. It observes and explains. What you do with this information

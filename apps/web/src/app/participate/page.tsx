@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, MapPin, ExternalLink, Bike, Footprints, Waves, Trophy, PersonStanding } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MapPin, ArrowUpRight, Bike, Footprints, Waves, Trophy, PersonStanding, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ActivityType = 'run' | 'cycle' | 'swim' | 'tri' | 'walk'
@@ -43,23 +43,23 @@ const sampleEvents: Event[] = [
   { id: '23', name: 'Year End Walk', date: new Date(2025, 11, 31), location: 'Multiple Cities', activityType: 'walk', distances: ['5K'], url: '#' },
 ]
 
-const activityConfig: Record<ActivityType, { label: string; icon: typeof Footprints }> = {
-  run: { label: 'Run', icon: Footprints },
-  cycle: { label: 'Cycle', icon: Bike },
-  swim: { label: 'Swim', icon: Waves },
-  tri: { label: 'Triathlon', icon: Trophy },
-  walk: { label: 'Walk', icon: PersonStanding },
+const activityConfig: Record<ActivityType, { label: string; icon: typeof Footprints; color: string }> = {
+  run: { label: 'Run', icon: Footprints, color: 'text-primary' },
+  cycle: { label: 'Cycle', icon: Bike, color: 'text-amber-600' },
+  swim: { label: 'Swim', icon: Waves, color: 'text-blue-500' },
+  tri: { label: 'Triathlon', icon: Trophy, color: 'text-purple-500' },
+  walk: { label: 'Walk', icon: PersonStanding, color: 'text-green-600' },
 }
 
 const activityTypes: ActivityType[] = ['run', 'cycle', 'swim', 'tri', 'walk']
 
-// Cyan color scale for events (light to dark)
-const cyanScale = [
-  'bg-cyan-50',
-  'bg-cyan-200',
-  'bg-cyan-400',
-  'bg-cyan-600',
-  'bg-cyan-800',
+// Terracotta color scale for events (matching our theme)
+const terracottaScale = [
+  'bg-primary/10',
+  'bg-primary/30',
+  'bg-primary/50',
+  'bg-primary/70',
+  'bg-primary',
 ]
 
 function getEventCountForDate(date: Date, events: Event[]): number {
@@ -70,29 +70,36 @@ function getEventCountForDate(date: Date, events: Event[]): number {
   ).length
 }
 
-function getCyanClass(count: number): string {
-  if (count === 0) return 'bg-muted'
-  if (count === 1) return cyanScale[1]
-  if (count === 2) return cyanScale[2]
-  if (count === 3) return cyanScale[3]
-  return cyanScale[4]
+function getHeatmapClass(count: number): string {
+  if (count === 0) return 'bg-muted/50'
+  if (count === 1) return terracottaScale[1]
+  if (count === 2) return terracottaScale[2]
+  if (count === 3) return terracottaScale[3]
+  return terracottaScale[4]
 }
 
 function generateYearDates(year: number): Date[] {
   const dates: Date[] = []
   const startDate = new Date(year, 0, 1)
-  // Adjust to start from Sunday
   const startDay = startDate.getDay()
-  const adjustedStart = new Date(startDate)
-  adjustedStart.setDate(adjustedStart.getDate() - startDay)
 
-  // Generate 53 weeks worth of dates
-  for (let i = 0; i < 53 * 7; i++) {
-    const date = new Date(adjustedStart)
-    date.setDate(adjustedStart.getDate() + i)
+  // Create dates using local time to avoid timezone issues
+  for (let i = -startDay; i < 53 * 7 - startDay; i++) {
+    const date = new Date(year, 0, 1 + i)
     dates.push(date)
   }
   return dates
+}
+
+// Helper to create a date key without timezone issues
+function getDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// Parse date key back to local date (avoids UTC parsing issues)
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Date(year, month - 1, day)
 }
 
 export default function ParticipatePage() {
@@ -103,30 +110,19 @@ export default function ParticipatePage() {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
-  const monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ]
-
-  const fullMonthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ]
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const fullMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
   const filteredEvents = sampleEvents.filter(event => {
-    const matchesFilter = activeFilter === 'all' || event.activityType === activeFilter
-    return matchesFilter
+    return activeFilter === 'all' || event.activityType === activeFilter
   })
 
   const eventsForSelectedMonth = filteredEvents.filter(event => {
-    const eventMonth = event.date.getMonth()
-    const eventYear = event.date.getFullYear()
-    return eventMonth === month && eventYear === year
+    return event.date.getMonth() === month && event.date.getFullYear() === year
   })
 
   const yearDates = generateYearDates(year)
 
-  // Group events by date for the list
   const eventsByDate = (selectedDate ?
     filteredEvents.filter(e =>
       e.date.getFullYear() === selectedDate.getFullYear() &&
@@ -134,7 +130,7 @@ export default function ParticipatePage() {
       e.date.getDate() === selectedDate.getDate()
     ) : eventsForSelectedMonth
   ).reduce((acc, event) => {
-    const dateKey = event.date.toISOString().split('T')[0]
+    const dateKey = getDateKey(event.date)
     if (!acc[dateKey]) acc[dateKey] = []
     acc[dateKey].push(event)
     return acc
@@ -151,100 +147,155 @@ export default function ParticipatePage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
+    <div className="min-h-[calc(100vh-4rem)] overflow-hidden">
+      <style jsx>{`
+        @keyframes slide-down {
+          0% { transform: translateY(-30px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slide-up {
+          0% { transform: translateY(20px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fade-in {
+          0% { opacity: 0; }
+          100% { opacity: 1; }
+        }
+        @keyframes scale-in {
+          0% { transform: scale(0.95); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .header-animate { animation: slide-down 0.6s ease-out forwards; }
+        .header-subtitle { animation: slide-down 0.6s ease-out 0.1s forwards; opacity: 0; }
+        .heatmap-animate { animation: scale-in 0.5s ease-out 0.2s forwards; opacity: 0; }
+        .filter-animate { animation: slide-up 0.4s ease-out 0.3s forwards; opacity: 0; }
+        .list-animate { animation: fade-in 0.5s ease-out 0.4s forwards; opacity: 0; }
+        .event-row { animation: slide-up 0.4s ease-out forwards; opacity: 0; }
+      `}</style>
+
       {/* Header */}
-      <div className="border-b border-border">
+      <div className="border-b border-border bg-gradient-to-b from-primary/5 to-transparent">
         <div className="container mx-auto px-4 py-12">
-          <h1 className="text-4xl font-light tracking-tight mb-2">Participate</h1>
-          <p className="text-lg text-muted-foreground">Find human-powered events across India</p>
+          <h1 className="header-animate text-4xl font-light tracking-tight mb-2">Participate</h1>
+          <p className="header-subtitle text-lg text-muted-foreground">Find human-powered events across India</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Heatmap */}
-        <div className="mb-8 p-6 border border-border rounded-lg bg-card">
-          <div className="flex items-center justify-between mb-4">
+        {/* Heatmap Calendar */}
+        <div className="heatmap-animate mb-10">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-muted-foreground">
               {filteredEvents.length} events in {year}
             </h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Less</span>
               <div className="flex gap-0.5">
-                <div className="w-3 h-3 rounded-sm bg-muted" />
-                {cyanScale.slice(1).map((cls, i) => (
-                  <div key={i} className={cn('w-3 h-3 rounded-sm', cls)} />
+                <div className="w-2.5 h-2.5 rounded-sm bg-muted/50" />
+                {terracottaScale.slice(1).map((cls, i) => (
+                  <div key={i} className={cn('w-2.5 h-2.5 rounded-sm', cls)} />
                 ))}
               </div>
               <span>More</span>
             </div>
           </div>
 
-          {/* Month labels */}
-          <div className="flex mb-1 text-xs text-muted-foreground">
-            <div className="w-8" /> {/* Spacer for day labels */}
-            {monthNames.map((m, i) => (
-              <div key={m} className="flex-1 text-center">
-                {m}
-              </div>
-            ))}
-          </div>
-
-          {/* Heatmap grid */}
-          <div className="flex">
-            {/* Day labels */}
-            <div className="flex flex-col justify-around w-8 text-xs text-muted-foreground pr-2">
-              <span>Mon</span>
-              <span>Wed</span>
-              <span>Fri</span>
+          <div className="p-4 bg-muted/20 rounded-xl border border-border/50 relative">
+            {/* Month labels - clickable */}
+            <div className="flex mb-1">
+              <div className="w-6" />
+              {monthNames.map((m, monthIndex) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setCurrentDate(new Date(year, monthIndex, 1))
+                    setSelectedDate(null)
+                  }}
+                  className={cn(
+                    'flex-1 text-center text-[10px] py-1 rounded transition-all duration-200',
+                    month === monthIndex
+                      ? 'text-primary font-medium bg-primary/10'
+                      : 'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50'
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
             </div>
 
-            {/* Grid */}
-            <div className="flex-1 grid grid-rows-7 grid-flow-col gap-0.5">
-              {yearDates.map((date, i) => {
-                const count = getEventCountForDate(date, filteredEvents)
-                const isCurrentYear = date.getFullYear() === year
-                const isSelected = selectedDate &&
-                  date.getFullYear() === selectedDate.getFullYear() &&
-                  date.getMonth() === selectedDate.getMonth() &&
-                  date.getDate() === selectedDate.getDate()
+            {/* Heatmap grid with month highlight */}
+            <div className="flex relative">
+              <div className="flex flex-col justify-around w-6 text-[10px] text-muted-foreground/70 pr-1">
+                <span>M</span>
+                <span>W</span>
+                <span>F</span>
+              </div>
 
-                return (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      if (count > 0 && isCurrentYear) {
-                        setSelectedDate(date)
-                        setCurrentDate(new Date(date.getFullYear(), date.getMonth(), 1))
-                      }
-                    }}
-                    className={cn(
-                      'w-3 h-3 rounded-sm transition-all',
-                      isCurrentYear ? getCyanClass(count) : 'bg-transparent',
-                      count > 0 && isCurrentYear && 'cursor-pointer hover:ring-2 hover:ring-foreground/20 hover:scale-125',
-                      isSelected && 'ring-2 ring-foreground scale-125'
-                    )}
-                    title={isCurrentYear ? `${date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${count} event${count !== 1 ? 's' : ''}` : ''}
-                  />
-                )
-              })}
+              <div className="flex-1 relative">
+                {/* Month highlight overlay */}
+                <div
+                  className="absolute top-0 bottom-0 border-2 border-primary/40 rounded-md pointer-events-none transition-all duration-300 bg-primary/5"
+                  style={{
+                    left: `${(month / 12) * 100}%`,
+                    width: `${100 / 12}%`,
+                  }}
+                />
+
+                <div className="grid grid-rows-7 grid-flow-col gap-[2px]">
+                  {yearDates.map((date, i) => {
+                    const count = getEventCountForDate(date, filteredEvents)
+                    const isCurrentYear = date.getFullYear() === year
+                    const isInSelectedMonth = isCurrentYear && date.getMonth() === month
+                    const isSelectedDate = selectedDate &&
+                      date.getFullYear() === selectedDate.getFullYear() &&
+                      date.getMonth() === selectedDate.getMonth() &&
+                      date.getDate() === selectedDate.getDate()
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          if (isCurrentYear) {
+                            setCurrentDate(new Date(date.getFullYear(), date.getMonth(), 1))
+                            if (count > 0) {
+                              setSelectedDate(date)
+                            } else {
+                              setSelectedDate(null)
+                            }
+                          }
+                        }}
+                        className={cn(
+                          'w-2.5 h-2.5 rounded-sm transition-all duration-200',
+                          isCurrentYear ? getHeatmapClass(count) : 'bg-transparent',
+                          isCurrentYear && 'cursor-pointer',
+                          count > 0 && isCurrentYear && 'hover:scale-150 hover:ring-1 hover:ring-primary',
+                          isSelectedDate && 'ring-2 ring-foreground scale-150',
+                          isInSelectedMonth && count === 0 && 'bg-primary/5'
+                        )}
+                        title={isCurrentYear ? `${date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${count} event${count !== 1 ? 's' : ''}` : ''}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Filter */}
-        <div className="flex items-center gap-4 mb-8">
-          <span className="text-sm text-muted-foreground">Filter:</span>
+        {/* Filters and Month Nav */}
+        <div className="filter-animate flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          {/* Filter pills */}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setActiveFilter('all')}
               className={cn(
-                'px-3 py-1.5 text-sm rounded border transition-all duration-200',
+                'px-3 py-1.5 text-sm rounded-full transition-all duration-200',
                 activeFilter === 'all'
-                  ? 'bg-foreground text-background border-foreground'
-                  : 'border-border hover:border-foreground/50 hover:bg-muted/50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
               )}
             >
-              All
+              All Events
             </button>
             {activityTypes.map(type => {
               const config = activityConfig[type]
@@ -254,10 +305,10 @@ export default function ParticipatePage() {
                   key={type}
                   onClick={() => setActiveFilter(type)}
                   className={cn(
-                    'px-3 py-1.5 text-sm rounded border transition-all duration-200 flex items-center gap-1.5',
+                    'px-3 py-1.5 text-sm rounded-full transition-all duration-200 flex items-center gap-1.5',
                     activeFilter === type
-                      ? 'bg-foreground text-background border-foreground'
-                      : 'border-border hover:border-foreground/50 hover:bg-muted/50'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -266,52 +317,62 @@ export default function ParticipatePage() {
               )
             })}
           </div>
-        </div>
 
-        {/* Month navigation and events */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
+          {/* Month navigation */}
+          <div className="flex items-center gap-2">
             <button
               onClick={prevMonth}
-              className="p-2 hover:bg-muted rounded transition-colors"
+              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
               aria-label="Previous month"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <h2 className="text-xl font-medium min-w-[180px] text-center">
+            <span className="text-sm font-medium min-w-[120px] text-center">
               {fullMonthNames[month]} {year}
-            </h2>
+            </span>
             <button
               onClick={nextMonth}
-              className="p-2 hover:bg-muted rounded transition-colors"
+              className="p-1.5 hover:bg-muted rounded-lg transition-colors"
               aria-label="Next month"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
+            {selectedDate && (
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+              >
+                Clear
+              </button>
+            )}
           </div>
-          {selectedDate && (
-            <button
-              onClick={() => setSelectedDate(null)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Clear selection
-            </button>
-          )}
         </div>
 
-        {/* Events list */}
-        <div className="space-y-8">
+        {/* Events List */}
+        <div className="list-animate space-y-6">
           {Object.entries(eventsByDate)
-            .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
-            .map(([dateKey, events]) => {
-              const date = new Date(dateKey)
+            .sort(([a], [b]) => parseDateKey(a).getTime() - parseDateKey(b).getTime())
+            .map(([dateKey, events], groupIndex) => {
+              const date = parseDateKey(dateKey)
               return (
                 <div key={dateKey}>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                    {date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {events.map(event => {
+                  {/* Date header */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary">
+                      <div className="text-center">
+                        <div className="text-lg font-semibold leading-none">{date.getDate()}</div>
+                        <div className="text-[10px] uppercase tracking-wide">{monthNames[date.getMonth()]}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{date.toLocaleDateString('en-IN', { weekday: 'long' })}</p>
+                      <p className="text-xs text-muted-foreground">{events.length} event{events.length > 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+
+                  {/* Event cards */}
+                  <div className="space-y-2 pl-0 sm:pl-[60px]">
+                    {events.map((event, eventIndex) => {
                       const config = activityConfig[event.activityType]
                       const Icon = config.icon
                       return (
@@ -320,42 +381,47 @@ export default function ParticipatePage() {
                           href={event.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="group block bg-card border border-border rounded-lg p-5 hover:border-foreground/20 hover:shadow-md transition-all duration-300"
+                          className="event-row group flex items-center gap-4 p-4 rounded-xl bg-card border border-transparent hover:border-primary/20 hover:bg-primary/5 transition-all duration-300"
+                          style={{ animationDelay: `${0.5 + (groupIndex * 0.1) + (eventIndex * 0.05)}s` }}
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <div className="inline-flex items-center justify-center w-7 h-7 rounded bg-muted group-hover:bg-muted/80 transition-colors">
-                                  <Icon className="w-3.5 h-3.5 text-foreground/70 group-hover:text-foreground transition-colors" strokeWidth={1.5} />
-                                </div>
-                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                  {config.label}
-                                </span>
-                              </div>
-
-                              <h4 className="text-lg font-medium tracking-tight group-hover:text-foreground/80 transition-colors">
-                                {event.name}
-                              </h4>
-
-                              <div className="flex items-center gap-1.5 text-muted-foreground">
-                                <MapPin className="w-3.5 h-3.5" strokeWidth={1.5} />
-                                <span className="text-sm">{event.location}</span>
-                              </div>
-
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                {event.distances.map(distance => (
-                                  <span
-                                    key={distance}
-                                    className="px-2 py-0.5 text-xs font-medium bg-muted rounded"
-                                  >
-                                    {distance}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all flex-shrink-0" />
+                          {/* Icon */}
+                          <div className={cn(
+                            'flex items-center justify-center w-10 h-10 rounded-lg bg-muted/50 group-hover:bg-primary/10 transition-colors',
+                            config.color
+                          )}>
+                            <Icon className="w-5 h-5" strokeWidth={1.5} />
                           </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium truncate group-hover:text-primary transition-colors">
+                              {event.name}
+                            </h4>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {event.location}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Distances */}
+                          <div className="hidden sm:flex items-center gap-1.5">
+                            {event.distances.slice(0, 3).map((distance) => (
+                              <span
+                                key={distance}
+                                className="px-2 py-0.5 text-xs bg-muted/50 rounded-md group-hover:bg-primary/10 transition-colors"
+                              >
+                                {distance}
+                              </span>
+                            ))}
+                            {event.distances.length > 3 && (
+                              <span className="text-xs text-muted-foreground">+{event.distances.length - 3}</span>
+                            )}
+                          </div>
+
+                          {/* Arrow */}
+                          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                         </a>
                       )
                     })}
@@ -365,9 +431,10 @@ export default function ParticipatePage() {
             })}
 
           {Object.keys(eventsByDate).length === 0 && (
-            <div className="text-center py-16">
-              <p className="text-muted-foreground">No events found for this month.</p>
-              <p className="text-sm text-muted-foreground mt-2">Try selecting a different month or filter.</p>
+            <div className="text-center py-20">
+              <Calendar className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+              <p className="text-muted-foreground">No events found for {fullMonthNames[month]}</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Try selecting a different month or filter</p>
             </div>
           )}
         </div>

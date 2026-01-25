@@ -116,18 +116,95 @@ export default function EquipPage() {
   )
 
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
+    <div className="min-h-[calc(100vh-4rem)] overflow-hidden">
+      {/* Funky animated styles */}
+      <style jsx>{`
+        @keyframes slide-down {
+          0% { transform: translateY(-30px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes slide-up {
+          0% { transform: translateY(30px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes bounce-in {
+          0% { transform: scale(0.3) translateY(50px); opacity: 0; }
+          50% { transform: scale(1.05) translateY(-5px); }
+          70% { transform: scale(0.95) translateY(2px); }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(-2deg); }
+          50% { transform: rotate(2deg); }
+        }
+
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+
+        .header-animate {
+          animation: slide-down 0.6s ease-out forwards;
+        }
+
+        .header-subtitle {
+          animation: slide-down 0.6s ease-out 0.1s forwards;
+          opacity: 0;
+        }
+
+        .filter-animate {
+          animation: slide-up 0.5s ease-out 0.2s forwards;
+          opacity: 0;
+        }
+
+        .product-card {
+          animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+          opacity: 0;
+        }
+
+        .product-card:hover .product-image {
+          animation: float 2s ease-in-out infinite;
+        }
+
+        .filter-btn:hover {
+          animation: wiggle 0.3s ease-in-out;
+        }
+
+        .price-tag {
+          background: linear-gradient(90deg, transparent, rgba(201, 100, 66, 0.1), transparent);
+          background-size: 200% 100%;
+        }
+
+        .price-tag:hover {
+          animation: shimmer 1.5s ease-in-out infinite;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="border-b border-border">
         <div className="container mx-auto px-4 py-12">
-          <h1 className="text-4xl font-light tracking-tight mb-2">Equip</h1>
-          <p className="text-lg text-muted-foreground">Gear that lasts</p>
+          <h1 className="header-animate text-4xl font-light tracking-tight mb-2">
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">E</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">q</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">u</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">i</span>
+            <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">p</span>
+          </h1>
+          <p className="header-subtitle text-lg text-muted-foreground">Gear that lasts</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
         {/* Filter */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="filter-animate flex items-center gap-4 mb-8">
           <span className="text-sm text-muted-foreground">Filter:</span>
           <div className="flex gap-2">
             {(['all', 'apparel', 'accessories'] as Category[]).map(category => {
@@ -138,7 +215,7 @@ export default function EquipPage() {
                   key={category}
                   onClick={() => setActiveCategory(category)}
                   className={cn(
-                    'px-4 py-2 text-sm rounded border transition-all duration-200 flex items-center gap-1.5',
+                    'filter-btn px-4 py-2 text-sm rounded border transition-all duration-300 flex items-center gap-1.5 hover:scale-105',
                     activeCategory === category
                       ? 'bg-foreground text-background border-foreground'
                       : 'border-border hover:border-foreground/50 hover:bg-muted/50'
@@ -154,17 +231,18 @@ export default function EquipPage() {
 
         {/* Product grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredProducts.map(product => (
+          {filteredProducts.map((product, index) => (
             <Link
               key={product.id}
               href={`/equip/${product.slug}`}
-              className="group"
+              className="product-card group"
+              style={{ animationDelay: `${0.3 + index * 0.1}s` }}
             >
-              <div className="aspect-square bg-muted rounded-lg mb-4 overflow-hidden relative">
+              <div className="aspect-square bg-muted rounded-lg mb-4 overflow-hidden relative hover:shadow-xl hover:shadow-primary/10 transition-all duration-500">
                 {/* Placeholder for product image */}
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/30">
+                <div className="product-image absolute inset-0 flex items-center justify-center text-muted-foreground/30">
                   <svg
-                    className="w-16 h-16 group-hover:scale-110 transition-transform duration-500"
+                    className="w-16 h-16 group-hover:scale-125 group-hover:text-primary/30 transition-all duration-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -177,15 +255,19 @@ export default function EquipPage() {
                     />
                   </svg>
                 </div>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-foreground/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                {/* Hover overlay with gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-primary/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
+                {/* Corner accent */}
+                <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-t-primary/0 border-l-[40px] border-l-transparent group-hover:border-t-primary/20 transition-all duration-500" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-medium tracking-tight group-hover:text-foreground/70 transition-colors">
+                <h3 className="font-medium tracking-tight group-hover:text-primary group-hover:translate-x-1 transition-all duration-300">
                   {product.name}
                 </h3>
-                <p className="text-sm text-muted-foreground">{product.variant}</p>
-                <p className="text-sm font-medium">{formatPrice(product.price)}</p>
+                <p className="text-sm text-muted-foreground group-hover:text-foreground/70 transition-colors duration-300">{product.variant}</p>
+                <p className="price-tag text-sm font-medium inline-block px-2 py-0.5 rounded group-hover:bg-primary/10 transition-all duration-300">
+                  {formatPrice(product.price)}
+                </p>
               </div>
             </Link>
           ))}

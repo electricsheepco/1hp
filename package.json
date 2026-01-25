@@ -10,7 +10,10 @@
     "lint": "npm run lint --workspace=apps/web",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "video:dev": "npm run dev --workspace=apps/video",
+    "video:render:post": "npm run render:post --workspace=apps/video",
+    "video:render:reel": "npm run render:reel --workspace=apps/video"
   },
   "workspaces": [
     "apps/*",
