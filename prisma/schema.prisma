@@ -13,9 +13,10 @@ datasource db {
 
 model User {
   id            String    @id @default(cuid())
-  email         String    @unique
+  email         String?   @unique
   emailVerified DateTime?
   name          String?
+  image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -23,6 +24,7 @@ model User {
   sessions      Session[]
   activities    Activity[]
   runstates     RunstateSnapshot[]
+  riderLogs     RiderLog[]
 }
 
 model Account {
@@ -164,4 +166,91 @@ model RunstateSnapshot {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, computedAt])
+}
+
+// ============================================
+// INDIA VELO (Routes)
+// ============================================
+
+enum RouteType {
+  grand
+  state
+}
+
+enum RouteStatus {
+  proposed
+  active
+}
+
+enum SurfaceType {
+  paved
+  gravel
+  mixed
+  dirt
+}
+
+enum RoadClass {
+  SH
+  MDR
+  ODR
+  VR
+}
+
+model Route {
+  id            String      @id @default(cuid())
+  code          String      @unique  // IV01, KA01, MH01 etc.
+  name          String
+  slug          String      @unique
+  type          RouteType
+  description   String?     @db.Text
+  totalDistance Int?        // km
+  states        String[]    // state codes e.g. ["KA", "GA", "MH"]
+  parentRouteId String?
+  status        RouteStatus @default(proposed)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  parentRoute   Route?      @relation("RouteHierarchy", fields: [parentRouteId], references: [id])
+  childRoutes   Route[]     @relation("RouteHierarchy")
+  stages        Stage[]
+
+  @@index([type])
+  @@index([status])
+}
+
+model Stage {
+  id          String      @id @default(cuid())
+  routeId     String
+  number      Int
+  name        String
+  slug        String
+  startPoint  String
+  endPoint    String
+  distance    Int         // km
+  surface     SurfaceType @default(paved)
+  roadClass   RoadClass   @default(MDR)
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  route       Route       @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  riderLogs   RiderLog[]
+
+  @@unique([routeId, number])
+  @@unique([routeId, slug])
+  @@index([routeId])
+}
+
+model RiderLog {
+  id          String   @id @default(cuid())
+  userId      String
+  stageId     String
+  completedAt DateTime @default(now())
+  note        String?  @db.VarChar(200)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stage       Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([stageId])
+  @@index([userId])
 }
