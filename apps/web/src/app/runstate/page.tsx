@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronDown, ChevronUp, Link as LinkIcon } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSession, signIn, signOut } from 'next-auth/react'
+import { ChevronDown, ChevronUp, Link as LinkIcon, RefreshCw, Loader2, Footprints, Bike, Waves, PersonStanding } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type ViewState = 'empty' | 'insufficient' | 'active'
+type ViewState = 'loading' | 'empty' | 'insufficient' | 'active' | 'error'
 
 interface DailyLoad {
-  date: Date
+  date: string
   load: number
 }
 
@@ -18,67 +19,45 @@ interface RunstateData {
   balance: number
   inputCount: number
   inputWindow: number
-  computedAt: Date
+  computedAt: string
 }
 
-// Generate sample daily load data for the past year
-function generateSampleLoadData(): DailyLoad[] {
-  const data: DailyLoad[] = []
-  const today = new Date()
-  const startDate = new Date(today.getFullYear(), 0, 1)
-
-  for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
-    // Simulate varied training load
-    const dayOfWeek = d.getDay()
-    const weekOfYear = Math.floor((d.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000))
-
-    // Base pattern: higher on weekends, rest days mid-week
-    let baseLoad = 0
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      baseLoad = 30 + Math.random() * 40 // Weekend long sessions
-    } else if (dayOfWeek === 1 || dayOfWeek === 4) {
-      baseLoad = 15 + Math.random() * 25 // Easy days
-    } else if (dayOfWeek === 2 || dayOfWeek === 5) {
-      baseLoad = 20 + Math.random() * 35 // Quality sessions
-    } else {
-      baseLoad = Math.random() * 10 // Rest or very easy
-    }
-
-    // Add some periodization (higher load every 4th week, lower every 8th)
-    if (weekOfYear % 8 === 7) {
-      baseLoad *= 0.5 // Recovery week
-    } else if (weekOfYear % 4 === 3) {
-      baseLoad *= 1.2 // Build week
-    }
-
-    // Some random rest days
-    if (Math.random() < 0.15) {
-      baseLoad = 0
-    }
-
-    data.push({
-      date: new Date(d),
-      load: Math.round(baseLoad * 10) / 10,
-    })
-  }
-
-  return data
+interface RunstateExplanation {
+  summary: string
+  loadContext: string
+  trendContext: string
+  balanceContext: string
 }
 
-const sampleLoadHistory = generateSampleLoadData()
-
-const sampleData: RunstateData = {
-  load: 42.3,
-  baseline: 38.5,
-  trend: 'stable',
-  balance: 0.1,
-  inputCount: 12,
-  inputWindow: 28,
-  computedAt: new Date(),
+interface RecentActivity {
+  id: string
+  name: string | null
+  date: string
+  duration: string
+  distance: string | null
+  pace: string | null
+  speed: string | null
+  heartRate: number | null
 }
 
-// Orange to brick red color scale for training load
-const loadColorScale = [
+interface ActivityMetric {
+  type: string
+  label: string
+  count: number
+  totalDuration: number
+  totalDurationFormatted: string
+  totalDistance: number | null
+  avgPace: string | null
+  avgPaceRaw: number | null
+  bestPace: string | null
+  bestPaceRaw: number | null
+  avgSpeed: number | null
+  avgHeartRate: number | null
+  recentActivities: RecentActivity[]
+}
+
+// Orange to brick red colour scale for training load
+const loadColourScale = [
   'bg-orange-50',
   'bg-orange-200',
   'bg-orange-400',
@@ -86,12 +65,12 @@ const loadColorScale = [
   'bg-red-700',
 ]
 
-function getLoadColorClass(load: number): string {
+function getLoadColourClass(load: number): string {
   if (load === 0) return 'bg-muted'
-  if (load < 15) return loadColorScale[1]
-  if (load < 30) return loadColorScale[2]
-  if (load < 50) return loadColorScale[3]
-  return loadColorScale[4]
+  if (load < 15) return loadColourScale[1]
+  if (load < 30) return loadColourScale[2]
+  if (load < 50) return loadColourScale[3]
+  return loadColourScale[4]
 }
 
 function generateYearDates(year: number): Date[] {
@@ -99,7 +78,6 @@ function generateYearDates(year: number): Date[] {
   const startDate = new Date(year, 0, 1)
   const startDay = startDate.getDay()
 
-  // Create dates using local time to avoid timezone issues
   for (let i = -startDay; i < 53 * 7 - startDay; i++) {
     const date = new Date(year, 0, 1 + i)
     dates.push(date)
@@ -107,12 +85,8 @@ function generateYearDates(year: number): Date[] {
   return dates
 }
 
-function getLoadForDate(date: Date, loadHistory: DailyLoad[]): number {
-  const found = loadHistory.find(d =>
-    d.date.getFullYear() === date.getFullYear() &&
-    d.date.getMonth() === date.getMonth() &&
-    d.date.getDate() === date.getDate()
-  )
+function getLoadForDate(dateStr: string, loadHistory: DailyLoad[]): number {
+  const found = loadHistory.find(d => d.date === dateStr)
   return found?.load || 0
 }
 
@@ -124,53 +98,101 @@ function getTrendLabel(trend: 'rising' | 'stable' | 'falling'): string {
   }
 }
 
-function getTrendDescription(trend: 'rising' | 'stable' | 'falling'): string {
-  switch (trend) {
-    case 'rising': return 'Your load has been increasing over the past two weeks.'
-    case 'stable': return 'Your load has been consistent over the past two weeks.'
-    case 'falling': return 'Your load has been decreasing over the past two weeks.'
-  }
-}
-
 function getBalanceLabel(balance: number): string {
   if (balance < -0.3) return 'Run-focused'
   if (balance > 0.3) return 'Cycle-focused'
   return 'Balanced'
 }
 
-function getBalanceDescription(balance: number): string {
-  if (balance < -0.5) return 'Your recent activity has been primarily running.'
-  if (balance < -0.2) return 'Your recent activity leans toward running.'
-  if (balance <= 0.2) return 'Your recent activity is balanced across types.'
-  if (balance <= 0.5) return 'Your recent activity leans toward cycling.'
-  return 'Your recent activity has been primarily cycling.'
-}
-
-function getLoadDescription(load: number, baseline: number): string {
-  const ratio = baseline > 0 ? load / baseline : 1
-  if (ratio < 0.5) return 'Your current load is well below your typical level.'
-  if (ratio < 0.8) return 'Your current load is below your typical level.'
-  if (ratio <= 1.2) return 'Your current load is around your typical level.'
-  if (ratio <= 1.5) return 'Your current load is above your typical level.'
-  return 'Your current load is well above your typical level.'
-}
-
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export default function RunstatePage() {
-  const [viewState, setViewState] = useState<ViewState>('active')
+  const { data: session, status: sessionStatus } = useSession()
+  const [viewState, setViewState] = useState<ViewState>('loading')
+  const [runstateData, setRunstateData] = useState<RunstateData | null>(null)
+  const [explanation, setExplanation] = useState<RunstateExplanation | null>(null)
+  const [loadHistory, setLoadHistory] = useState<DailyLoad[]>([])
   const [explanationOpen, setExplanationOpen] = useState(false)
-  const [connected, setConnected] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [activityCount, setActivityCount] = useState(0)
+  const [minimumRequired, setMinimumRequired] = useState(3)
+  const [activityMetrics, setActivityMetrics] = useState<Record<string, ActivityMetric>>({})
+  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set())
 
   const year = new Date().getFullYear()
   const yearDates = generateYearDates(year)
 
-  const activeDays = sampleLoadHistory.filter(d => d.load > 0).length
+  const fetchRunstate = useCallback(async () => {
+    try {
+      const response = await fetch('/api/runstate')
+      const data = await response.json()
+
+      if (data.error) {
+        if (response.status === 401) {
+          setViewState('empty')
+        } else {
+          setViewState('error')
+        }
+        return
+      }
+
+      if (data.state === 'insufficient') {
+        setActivityCount(data.activityCount)
+        setMinimumRequired(data.minimumRequired)
+        setViewState('insufficient')
+        return
+      }
+
+      if (data.state === 'active') {
+        setRunstateData(data.result)
+        setExplanation(data.explanation)
+        setLoadHistory(data.loadHistory || [])
+        setActivityMetrics(data.activityMetrics || {})
+        setViewState('active')
+      }
+    } catch (error) {
+      console.error('Failed to fetch runstate:', error)
+      setViewState('error')
+    }
+  }, [])
+
+  const syncStrava = async () => {
+    setSyncing(true)
+    try {
+      const response = await fetch('/api/strava/sync', { method: 'POST' })
+      const data = await response.json()
+
+      if (data.success) {
+        // Refetch runstate after sync
+        await fetchRunstate()
+      }
+    } catch (error) {
+      console.error('Strava sync failed:', error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  useEffect(() => {
+    if (sessionStatus === 'loading') {
+      setViewState('loading')
+      return
+    }
+
+    if (sessionStatus === 'unauthenticated' || !session) {
+      setViewState('empty')
+      return
+    }
+
+    fetchRunstate()
+  }, [sessionStatus, session, fetchRunstate])
+
+  const activeDays = loadHistory.filter(d => d.load > 0).length
 
   return (
     <div className="min-h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Funky animated styles */}
+      {/* Animations */}
       <style jsx>{`
         @keyframes slide-down {
           0% { transform: translateY(-30px); opacity: 0; }
@@ -212,11 +234,6 @@ export default function RunstatePage() {
         @keyframes count-up {
           0% { transform: translateY(20px); opacity: 0; }
           100% { transform: translateY(0); opacity: 1; }
-        }
-
-        @keyframes slide-expand {
-          0% { width: 0; }
-          100% { width: var(--target-width); }
         }
 
         .header-animate {
@@ -261,10 +278,6 @@ export default function RunstatePage() {
           animation: pulse 0.5s ease-in-out infinite;
         }
 
-        .demo-btn:hover {
-          animation: wiggle 0.3s ease-in-out;
-        }
-
         .heatmap-cell:hover {
           animation: pulse 0.3s ease-in-out;
         }
@@ -287,66 +300,27 @@ export default function RunstatePage() {
             <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">t</span>
             <span className="inline-block hover:scale-110 hover:text-primary transition-all duration-300">e</span>
           </h1>
-          <p className="header-subtitle text-lg text-muted-foreground">Understanding your body</p>
+          <p className="header-subtitle text-lg text-muted-foreground">Know where you are</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Demo state toggle */}
-        <div className="connection-status mb-8 p-4 bg-muted/50 rounded-lg max-w-3xl hover:bg-muted/70 transition-colors duration-300">
-          <p className="text-xs text-muted-foreground mb-2">Demo: View different states</p>
-          <div className="flex gap-2">
-            {(['empty', 'insufficient', 'active'] as ViewState[]).map(state => (
-              <button
-                key={state}
-                onClick={() => {
-                  setViewState(state)
-                  setConnected(state !== 'empty')
-                }}
-                className={cn(
-                  'demo-btn px-3 py-1.5 text-xs rounded border transition-all duration-300 capitalize hover:scale-105',
-                  viewState === state
-                    ? 'bg-foreground text-background'
-                    : 'border-border hover:border-foreground/50 hover:bg-muted/50'
-                )}
-              >
-                {state}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Connection status */}
-        {connected && (
-          <div className="connection-status flex items-center justify-between mb-8 pb-8 border-b border-border max-w-3xl">
-            <div className="flex items-center gap-2 group">
-              <div className="w-2 h-2 rounded-full bg-foreground animate-pulse group-hover:scale-150 transition-transform" />
-              <span className="text-sm group-hover:text-primary transition-colors">Connected: Strava</span>
-            </div>
-            <button
-              onClick={() => {
-                setConnected(false)
-                setViewState('empty')
-              }}
-              className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300"
-            >
-              Disconnect
-            </button>
+        {/* Loading state */}
+        {viewState === 'loading' && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state - not connected */}
         {viewState === 'empty' && (
           <div className="text-center py-16 space-y-6 max-w-3xl mx-auto">
             <div className="space-y-2">
               <p className="text-lg">Runstate needs activity data to understand your current state.</p>
-              <p className="text-muted-foreground">Connect a data source to begin.</p>
+              <p className="text-muted-foreground">Connect Strava to begin.</p>
             </div>
             <button
-              onClick={() => {
-                setConnected(true)
-                setViewState('insufficient')
-              }}
+              onClick={() => signIn('strava')}
               className="connect-btn inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded font-medium hover:bg-foreground/90 hover:scale-105 transition-all duration-300"
             >
               <LinkIcon className="w-4 h-4" />
@@ -357,19 +331,86 @@ export default function RunstatePage() {
 
         {/* Insufficient data state */}
         {viewState === 'insufficient' && (
+          <div className="space-y-8">
+            {/* Connection status */}
+            <div className="connection-status flex items-center justify-between mb-8 pb-8 border-b border-border max-w-3xl">
+              <div className="flex items-center gap-2 group">
+                <div className="w-2 h-2 rounded-full bg-foreground animate-pulse group-hover:scale-150 transition-transform" />
+                <span className="text-sm group-hover:text-primary transition-colors">Connected: Strava</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={syncStrava}
+                  disabled={syncing}
+                  className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300 flex items-center gap-1"
+                >
+                  <RefreshCw className={cn('w-3 h-3', syncing && 'animate-spin')} />
+                  {syncing ? 'Syncing...' : 'Sync'}
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+
+            <div className="text-center py-16 space-y-4 max-w-3xl mx-auto">
+              <p className="text-lg">Runstate needs {minimumRequired - activityCount} more {minimumRequired - activityCount === 1 ? 'activity' : 'activities'} to provide meaningful insight.</p>
+              <p className="text-muted-foreground">
+                {activityCount} of {minimumRequired} minimum activities recorded in the last 28 days.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Error state */}
+        {viewState === 'error' && (
           <div className="text-center py-16 space-y-4 max-w-3xl mx-auto">
-            <p className="text-lg">Runstate needs 2 more activities to provide meaningful insight.</p>
-            <p className="text-muted-foreground">
-              1 of 3 minimum activities recorded in the last 28 days.
-            </p>
+            <p className="text-lg">Something went wrong.</p>
+            <button
+              onClick={fetchRunstate}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Try again
+            </button>
           </div>
         )}
 
         {/* Active state */}
-        {viewState === 'active' && (
-          <div className="space-y-8">
-            {/* Load Heatmap */}
-            <div className="heatmap-animate p-6 border border-border rounded-lg bg-card hover:border-primary/30 transition-colors duration-500">
+        {viewState === 'active' && runstateData && explanation && (
+          <div className="space-y-6">
+            {/* Connection status - full width */}
+            <div className="connection-status flex items-center justify-between pb-4 border-b border-border">
+              <div className="flex items-center gap-2 group">
+                <div className="w-2 h-2 rounded-full bg-foreground animate-pulse group-hover:scale-150 transition-transform" />
+                <span className="text-sm group-hover:text-primary transition-colors">Connected: Strava</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={syncStrava}
+                  disabled={syncing}
+                  className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300 flex items-center gap-1"
+                >
+                  <RefreshCw className={cn('w-3 h-3', syncing && 'animate-spin')} />
+                  {syncing ? 'Syncing...' : 'Sync'}
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="text-sm text-muted-foreground hover:text-foreground hover:scale-105 transition-all duration-300"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+
+            {/* Main dashboard grid - two columns on desktop */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left column - Load and state (2/3 width) */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Load Heatmap - full width of left column */}
+                <div className="heatmap-animate p-6 border border-border rounded-lg bg-card hover:border-primary/30 transition-colours duration-500">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-muted-foreground">
                   {activeDays} active days in {year}
@@ -378,7 +419,7 @@ export default function RunstatePage() {
                   <span>Less</span>
                   <div className="flex gap-0.5">
                     <div className="w-3 h-3 rounded-sm bg-muted" />
-                    {loadColorScale.slice(1).map((cls, i) => (
+                    {loadColourScale.slice(1).map((cls, i) => (
                       <div key={i} className={cn('w-3 h-3 rounded-sm transition-transform hover:scale-150', cls)} />
                     ))}
                   </div>
@@ -406,7 +447,8 @@ export default function RunstatePage() {
 
                 <div className="flex-1 grid grid-rows-7 grid-flow-col gap-0.5">
                   {yearDates.map((date, i) => {
-                    const load = getLoadForDate(date, sampleLoadHistory)
+                    const dateStr = date.toISOString().split('T')[0]
+                    const load = getLoadForDate(dateStr, loadHistory)
                     const isCurrentYear = date.getFullYear() === year
                     const isFuture = date > new Date()
                     const isSelected = selectedDate &&
@@ -424,7 +466,7 @@ export default function RunstatePage() {
                         }}
                         className={cn(
                           'heatmap-cell w-3 h-3 rounded-sm transition-all duration-200',
-                          isCurrentYear && !isFuture ? getLoadColorClass(load) : 'bg-transparent',
+                          isCurrentYear && !isFuture ? getLoadColourClass(load) : 'bg-transparent',
                           isCurrentYear && !isFuture && load > 0 && 'cursor-pointer hover:ring-2 hover:ring-orange-400/50 hover:scale-150',
                           isSelected && 'ring-2 ring-foreground scale-150'
                         )}
@@ -443,7 +485,7 @@ export default function RunstatePage() {
                       {selectedDate.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                     <p className="text-2xl font-light mt-1">
-                      {getLoadForDate(selectedDate, sampleLoadHistory)} <span className="text-sm text-muted-foreground">load</span>
+                      {getLoadForDate(selectedDate.toISOString().split('T')[0], loadHistory)} <span className="text-sm text-muted-foreground">load</span>
                     </p>
                   </div>
                   <button
@@ -456,144 +498,267 @@ export default function RunstatePage() {
               )}
             </div>
 
-            {/* Current state */}
-            <div className="max-w-3xl">
-              <h2 className="text-sm font-medium text-muted-foreground mb-4">Your current state</h2>
+            {/* Load card */}
+                <div className="load-card bg-card border border-border rounded-lg p-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-500">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">LOAD</p>
+                      <p className="load-value text-4xl font-light tracking-tight hover:text-primary transition-colours duration-300">{runstateData.load}</p>
+                    </div>
 
-              {/* Load card */}
-              <div className="load-card bg-card border border-border rounded-lg p-8 mb-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-500">
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">LOAD</p>
-                    <p className="load-value text-5xl font-light tracking-tight hover:text-primary transition-colors duration-300">{sampleData.load}</p>
+                    {/* Load bar */}
+                    <div className="space-y-2">
+                      <div className="relative h-2 bg-muted rounded overflow-hidden">
+                        <div
+                          className="absolute top-0 bottom-0 w-0.5 bg-muted-foreground/50"
+                          style={{ left: `${Math.min((runstateData.baseline / 200) * 100, 100)}%` }}
+                        />
+                        <div
+                          className="load-indicator absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-foreground rounded-full transition-all duration-500 hover:scale-150"
+                          style={{ left: `${Math.min((runstateData.load / 200) * 100, 100)}%`, marginLeft: '-6px' }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>0</span>
+                        <span className="hover:text-foreground transition-colours">baseline ({runstateData.baseline})</span>
+                        <span>200</span>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      {explanation.loadContext}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Trend and Balance cards */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div
+                    className="stat-card bg-card border border-border rounded-lg p-4 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-500"
+                    style={{ animationDelay: '0.5s' }}
+                  >
+                    <p className="text-xs font-medium text-muted-foreground mb-1">TREND</p>
+                    <p className="text-xl font-medium mb-2 hover:text-primary transition-colours duration-300">{getTrendLabel(runstateData.trend)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {explanation.trendContext}
+                    </p>
                   </div>
 
-                  {/* Load bar */}
-                  <div className="space-y-2">
-                    <div className="relative h-2 bg-muted rounded overflow-hidden">
-                      <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-muted-foreground/50"
-                        style={{ left: `${(sampleData.baseline / 100) * 100}%` }}
-                      />
-                      <div
-                        className="load-indicator absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-foreground rounded-full transition-all duration-500 hover:scale-150"
-                        style={{ left: `${(sampleData.load / 100) * 100}%`, marginLeft: '-6px' }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>0</span>
-                      <span className="hover:text-foreground transition-colors">baseline ({sampleData.baseline})</span>
-                      <span>100</span>
-                    </div>
+                  <div
+                    className="stat-card bg-card border border-border rounded-lg p-4 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-500"
+                    style={{ animationDelay: '0.6s' }}
+                  >
+                    <p className="text-xs font-medium text-muted-foreground mb-1">BALANCE</p>
+                    <p className="text-xl font-medium mb-2 hover:text-primary transition-colours duration-300">{getBalanceLabel(runstateData.balance)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {explanation.balanceContext}
+                    </p>
                   </div>
-
-                  <p className="text-muted-foreground">
-                    {getLoadDescription(sampleData.load, sampleData.baseline)}
-                  </p>
                 </div>
               </div>
 
-              {/* Trend and Balance cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div
-                  className="stat-card bg-card border border-border rounded-lg p-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-500"
-                  style={{ animationDelay: '0.5s' }}
-                >
-                  <p className="text-sm font-medium text-muted-foreground mb-1">TREND</p>
-                  <p className="text-2xl font-medium mb-3 hover:text-primary transition-colors duration-300">{getTrendLabel(sampleData.trend)}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {getTrendDescription(sampleData.trend)}
-                  </p>
-                </div>
+              {/* Right column - Activity cards (1/3 width) */}
+              <div className="space-y-4">
+                <h2 className="text-sm font-medium text-muted-foreground">Last 4 weeks</h2>
 
-                <div
-                  className="stat-card bg-card border border-border rounded-lg p-6 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-500"
-                  style={{ animationDelay: '0.6s' }}
-                >
-                  <p className="text-sm font-medium text-muted-foreground mb-1">BALANCE</p>
-                  <p className="text-2xl font-medium mb-3 hover:text-primary transition-colors duration-300">{getBalanceLabel(sampleData.balance)}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {getBalanceDescription(sampleData.balance)}
-                  </p>
-                </div>
-              </div>
+              {/* Activity metrics by type - stacked vertically in right column */}
+              {Object.keys(activityMetrics).length > 0 && (
+                <div className="space-y-3">
+                    {Object.values(activityMetrics).map((metric, idx) => {
+                      const isExpanded = expandedActivities.has(metric.type)
+                      const toggleExpand = () => {
+                        setExpandedActivities(prev => {
+                          const next = new Set(prev)
+                          if (next.has(metric.type)) {
+                            next.delete(metric.type)
+                          } else {
+                            next.add(metric.type)
+                          }
+                          return next
+                        })
+                      }
 
-              {/* About this data */}
-              <div className="border-t border-border pt-8">
-                <button
-                  onClick={() => setExplanationOpen(!explanationOpen)}
-                  className="expand-btn flex items-center justify-between w-full text-left group"
-                >
-                  <span className="font-medium group-hover:text-primary transition-colors">About this data</span>
-                  {explanationOpen ? (
-                    <ChevronUp className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      return (
+                        <button
+                          key={metric.type}
+                          onClick={toggleExpand}
+                          className={cn(
+                            "stat-card bg-card border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-all duration-300",
+                            isExpanded && "ring-2 ring-primary/50"
+                          )}
+                          style={{ animationDelay: `${0.7 + idx * 0.1}s` }}
+                        >
+                          {/* Icon and expand indicator */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                              {metric.type === 'run' && <Footprints className="w-5 h-5" />}
+                              {metric.type === 'cycle' && <Bike className="w-5 h-5" />}
+                              {metric.type === 'swim' && <Waves className="w-5 h-5" />}
+                              {metric.type === 'walk' && <PersonStanding className="w-5 h-5" />}
+                            </div>
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+
+                          {/* Activity type and count */}
+                          <p className="font-medium mb-3">{metric.label}</p>
+
+                          {/* Stats grid */}
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Activities</span>
+                              <span className="font-medium">{metric.count}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Time</span>
+                              <span className="font-medium">{metric.totalDurationFormatted}</span>
+                            </div>
+                            {metric.totalDistance && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Distance</span>
+                                <span className="font-medium">{metric.totalDistance} km</span>
+                              </div>
+                            )}
+                            {(metric.type === 'run' || metric.type === 'walk') && metric.avgPace && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Avg Pace</span>
+                                <span className="font-medium">{metric.avgPace}/km</span>
+                              </div>
+                            )}
+                            {metric.type === 'cycle' && metric.avgSpeed && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Avg Speed</span>
+                                <span className="font-medium">{metric.avgSpeed} km/h</span>
+                              </div>
+                            )}
+                            {metric.avgHeartRate && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Avg HR</span>
+                                <span className="font-medium">{metric.avgHeartRate} bpm</span>
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
                   )}
-                </button>
-
-                <p className="text-sm text-muted-foreground mt-2">
-                  Based on {sampleData.inputCount} activities over the past {sampleData.inputWindow} days.
-                  Last updated: {sampleData.computedAt.toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })} at {sampleData.computedAt.toLocaleTimeString('en-IN', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </p>
-
-                {explanationOpen && (
-                  <div className="mt-6 space-y-6 text-sm">
-                    <div className="border-t border-border pt-6">
-                      <h4 className="font-medium mb-3 hover:text-primary transition-colors">What Runstate measures</h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Runstate combines your recent activities into a unified view of your body's
-                        current state. It treats all human-powered movement — running, cycling,
-                        swimming, walking — as one continuous system.
-                      </p>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="group">
-                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Load</h5>
-                        <p className="text-muted-foreground">
-                          A cumulative measure of recent physical stress. Recent activities
-                          contribute more than older ones.
-                        </p>
-                      </div>
-                      <div className="group">
-                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Baseline</h5>
-                        <p className="text-muted-foreground">
-                          Your personal reference point, calculated from the past 90 days of activity.
-                        </p>
-                      </div>
-                      <div className="group">
-                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Trend</h5>
-                        <p className="text-muted-foreground">
-                          Whether your load is rising, falling, or stable compared to the previous two weeks.
-                        </p>
-                      </div>
-                      <div className="group">
-                        <h5 className="font-medium mb-1 group-hover:text-primary transition-colors">Balance</h5>
-                        <p className="text-muted-foreground">
-                          How your activity is distributed across different types.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-border pt-6">
-                      <h4 className="font-medium mb-3 hover:text-primary transition-colors">What Runstate does not do</h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Runstate does not tell you to do more or less. It does not set goals or
-                        track streaks. It observes and explains. What you do with this information
-                        is yours to decide.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
+            </div>
+
+            {/* Expanded activity rows - shown below the grid, full width */}
+            {Object.values(activityMetrics).map((metric) => {
+              const isExpanded = expandedActivities.has(metric.type)
+              if (!isExpanded) return null
+
+              return (
+                <div key={`${metric.type}-expanded`} className="bg-card border border-border rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 bg-muted/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                        {metric.type === 'run' && <Footprints className="w-3 h-3" />}
+                        {metric.type === 'cycle' && <Bike className="w-3 h-3" />}
+                        {metric.type === 'swim' && <Waves className="w-3 h-3" />}
+                        {metric.type === 'walk' && <PersonStanding className="w-3 h-3" />}
+                      </div>
+                      <span className="font-medium">{metric.label}</span>
+                      <span className="text-sm text-muted-foreground">· {metric.count} activities</span>
+                    </div>
+                    <button
+                      onClick={() => setExpandedActivities(prev => {
+                        const next = new Set(prev)
+                        next.delete(metric.type)
+                        return next
+                      })}
+                      className="text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  {/* Header row */}
+                  <div className="px-4 py-2 grid grid-cols-5 gap-4 text-xs text-muted-foreground font-medium border-b border-border">
+                    <span>Date</span>
+                    <span>Distance</span>
+                    <span>Duration</span>
+                    <span>{metric.type === 'cycle' ? 'Speed' : 'Pace'}</span>
+                    <span>HR</span>
+                  </div>
+
+                  {/* Activity rows */}
+                  {metric.recentActivities.map((activity, actIdx) => (
+                    <div
+                      key={activity.id}
+                      className={cn(
+                        'px-4 py-3 grid grid-cols-5 gap-4 text-sm',
+                        actIdx % 2 === 1 && 'bg-muted/10'
+                      )}
+                    >
+                      <span className="font-medium">{activity.date}</span>
+                      <span>{activity.distance || '-'}</span>
+                      <span>{activity.duration}</span>
+                      <span>
+                        {activity.pace && `${activity.pace}/km`}
+                        {activity.speed && `${activity.speed} km/h`}
+                        {!activity.pace && !activity.speed && '-'}
+                      </span>
+                      <span>{activity.heartRate || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+
+            {/* About this data - full width at bottom */}
+            <div className="border-t border-border pt-6">
+              <button
+                onClick={() => setExplanationOpen(!explanationOpen)}
+                className="expand-btn flex items-center justify-between w-full text-left group"
+              >
+                <span className="font-medium group-hover:text-primary transition-colours">About this data</span>
+                {explanationOpen ? (
+                  <ChevronUp className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colours" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colours" />
+                )}
+              </button>
+
+              <p className="text-sm text-muted-foreground mt-2">
+                Based on {runstateData.inputCount} activities over the past {runstateData.inputWindow} days.
+              </p>
+
+              {explanationOpen && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                  <div className="p-4 bg-card border border-border rounded-lg">
+                    <h5 className="font-medium mb-1">Load</h5>
+                    <p className="text-muted-foreground text-xs">
+                      Cumulative measure of recent physical stress. Recent activities contribute more.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-card border border-border rounded-lg">
+                    <h5 className="font-medium mb-1">Baseline</h5>
+                    <p className="text-muted-foreground text-xs">
+                      Personal reference point from the past 90 days of activity.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-card border border-border rounded-lg">
+                    <h5 className="font-medium mb-1">Trend</h5>
+                    <p className="text-muted-foreground text-xs">
+                      Whether load is rising, falling, or stable compared to previous two weeks.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-card border border-border rounded-lg">
+                    <h5 className="font-medium mb-1">Balance</h5>
+                    <p className="text-muted-foreground text-xs">
+                      How activity is distributed across different types.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

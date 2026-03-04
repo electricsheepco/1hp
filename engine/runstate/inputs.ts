@@ -26,7 +26,7 @@ const STRAVA_TYPE_MAP: Record<string, ActivityType> = {
 /**
  * Supported activity types for Runstate computation.
  */
-const SUPPORTED_TYPES: Set<ActivityType> = new Set([
+const SUPPORTED_TYPES = new Set<ActivityType>([
   'run',
   'cycle',
   'swim',

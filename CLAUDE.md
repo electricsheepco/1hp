@@ -114,14 +114,30 @@ Rendered videos output to: `apps/video/out/`
 - Remotion video setup
 - 3 pillar posts rendered
 
+### Runstate MVP Complete
+- Auth.js v5 with Strava OAuth
+- Runstate engine (inputs, normalize, compute, explain)
+- Strava sync API
+- Runstate computation API
+- Connected UI with real data
+
 ### Not Started
-- Database connection (Neon/Supabase)
-- Authentication (Auth.js)
-- Strava integration
+- Database hosting (needs .env with DATABASE_URL)
+- Strava API credentials (needs STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET)
 - Events calendar
 - Store/Equip functionality
 
 ## Session Notes
+
+### 2025-01-27
+- Built Runstate MVP (Full stack)
+  - Auth.js v5 with Strava OAuth provider
+  - Prisma client integration (schema already existed)
+  - Strava sync API (/api/strava/sync)
+  - Runstate computation API (/api/runstate)
+  - Connected UI to real data (replaces demo mode)
+- Engine at /engine/runstate/ (already existed, just fixed type issue)
+- Requires .env setup: DATABASE_URL, AUTH_SECRET, STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET
 
 ### 2025-01-25
 - Added unDraw illustrations with random rotation
