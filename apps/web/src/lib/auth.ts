@@ -17,8 +17,8 @@ function StravaCompatibleAdapter(): Adapter {
         providerAccountId: String(providerAccount.providerAccountId),
       })
     },
-    linkAccount: async (account: AdapterAccount) => {
-      return prismaAdapter.linkAccount!({
+    linkAccount: async (account: AdapterAccount): Promise<void> => {
+      await prismaAdapter.linkAccount!({
         ...account,
         providerAccountId: String(account.providerAccountId),
       })
